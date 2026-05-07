@@ -170,7 +170,7 @@ def _try_import_terminal_menu():
     try:
         from simple_term_menu import TerminalMenu
         return TerminalMenu
-    except ImportError:
+    except Exception:
         return None
 
 

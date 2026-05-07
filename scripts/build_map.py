@@ -34,6 +34,7 @@ from categories import (
 SCRIPTS_DIR = Path(__file__).parent
 BASE_DIR = SCRIPTS_DIR.parent
 DATA_DIR = SCRIPTS_DIR / "data"
+INPUT_DIR = BASE_DIR / "input_data"
 MAP_DIR = BASE_DIR / "output_map"
 TEMPLATE_PATH = SCRIPTS_DIR / "template.html"
 
@@ -115,9 +116,9 @@ def ensure_boundaries_index() -> None:
     con.execute(f"""
         COPY (
             SELECT GISCO_ID, LAU_NAME, CNTR_CODE
-            FROM ST_Read('{BOUNDARIES_CACHE}')
+            FROM ST_Read('{BOUNDARIES_CACHE.as_posix()}')
             ORDER BY CNTR_CODE, LAU_NAME
-        ) TO '{BOUNDARIES_INDEX}' (HEADER, DELIMITER ',');
+        ) TO '{BOUNDARIES_INDEX.as_posix()}' (HEADER, DELIMITER ',');
     """)
     con.close()
     print("  Search index ready.")
@@ -144,7 +145,7 @@ def _try_import_terminal_menu():
     try:
         from simple_term_menu import TerminalMenu
         return TerminalMenu
-    except ImportError:
+    except Exception:
         return None
 
 
@@ -278,35 +279,43 @@ def query_overture(
     con.execute(f"""
         CREATE TABLE boundaries AS
         SELECT LAU_NAME AS city, geom
-        FROM ST_Read('{BOUNDARIES_CACHE}')
+        FROM ST_Read('{BOUNDARIES_CACHE.as_posix()}')
         WHERE GISCO_ID IN ({id_list_sql});
     """)
 
-    # Compute bounding box with margin. Lets DuckDB skip irrelevant
-    # Parquet row groups so the query takes seconds, not hours.
-    bbox = con.execute("""
-        SELECT
-            ST_XMin(ST_Extent(geom)) - 0.1 AS xmin,
-            ST_YMin(ST_Extent(geom)) - 0.1 AS ymin,
-            ST_XMax(ST_Extent(geom)) + 0.1 AS xmax,
-            ST_YMax(ST_Extent(geom)) + 0.1 AS ymax
-        FROM boundaries;
-    """).fetchone()
-    xmin, ymin, xmax, ymax = bbox
-    print(f"    Bbox: [{xmin:.2f}, {ymin:.2f}] to [{xmax:.2f}, {ymax:.2f}]")
+    # Compute per-city bounding boxes with margin. Using individual boxes
+    # instead of one combined box avoids downloading data for the entire
+    # region between far-apart cities (e.g. Paris and Stockholm).
+    parquet_url = (
+        f"s3://overturemaps-us-west-2/release/{overture_release}"
+        f"/theme=places/type=place/*.parquet"
+    )
 
-    # Fetch places. The bbox filter drastically reduces S3 reads.
+    city_bboxes = con.execute("""
+        SELECT city,
+            ST_XMin(geom) - 0.1 AS xmin,
+            ST_YMin(geom) - 0.1 AS ymin,
+            ST_XMax(geom) + 0.1 AS xmax,
+            ST_YMax(geom) + 0.1 AS ymax
+        FROM boundaries;
+    """).fetchall()
+
+    parts = []
+    for city, xmin, ymin, xmax, ymax in city_bboxes:
+        print(f"    {city}: bbox [{xmin:.2f}, {ymin:.2f}] to [{xmax:.2f}, {ymax:.2f}]")
+        parts.append(f"""
+            SELECT geometry, names, categories, websites
+            FROM read_parquet('{parquet_url}')
+            WHERE bbox.xmin >= {xmin}
+              AND bbox.xmax <= {xmax}
+              AND bbox.ymin >= {ymin}
+              AND bbox.ymax <= {ymax}
+              AND categories.primary IN ({cat_list_sql})
+        """)
+
     con.execute(f"""
         CREATE TABLE places AS
-        SELECT geometry, names, categories, websites
-        FROM read_parquet(
-            's3://overturemaps-us-west-2/release/{overture_release}/theme=places/type=place/*.parquet'
-        )
-        WHERE bbox.xmin >= {xmin}
-          AND bbox.xmax <= {xmax}
-          AND bbox.ymin >= {ymin}
-          AND bbox.ymax <= {ymax}
-          AND categories.primary IN ({cat_list_sql});
+        {" UNION ALL ".join(parts)};
     """)
 
     # Spatial join: keep only places that fall within a city boundary.
@@ -319,7 +328,10 @@ def query_overture(
             p.websites[1] AS website,
             b.city
         FROM places p
-        JOIN boundaries b ON ST_Within(p.geometry, b.geom);
+        JOIN boundaries b ON ST_Within(
+            ST_GeomFromWKB(ST_AsWKB(p.geometry)),
+            ST_GeomFromWKB(ST_AsWKB(b.geom))
+        );
     """)
 
     rows = con.execute("SELECT * FROM result").fetchall()
@@ -370,6 +382,137 @@ def query_overture(
 
 
 # ---------------------------------------------------------------------------
+# Import from CSV
+# ---------------------------------------------------------------------------
+
+
+def find_input_csv() -> Path | None:
+    """Return the most recently modified CSV file in input_data/, or None."""
+    if not INPUT_DIR.is_dir():
+        return None
+    csvs = list(INPUT_DIR.glob("*.csv"))
+    if not csvs:
+        return None
+    return max(csvs, key=lambda p: p.stat().st_mtime)
+
+
+def load_csv_as_geojson(csv_path: Path, groups: dict[str, list[str]]) -> dict:
+    """Read an exported CSV and return a places FeatureCollection."""
+    print(f"  Loading: {csv_path.name}")
+    features = []
+    with open(csv_path, encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            lat = row.get("lat", "").strip()
+            lon = row.get("lon", "").strip()
+            if not lat or not lon:
+                continue
+            category = row.get("category", "unknown").strip() or "unknown"
+            props = {
+                "name": row.get("name", "Unnamed").strip() or "Unnamed",
+                "category": category,
+                "city": row.get("city", "").strip(),
+                "color": get_category_color(category, groups),
+            }
+            website = row.get("website", "").strip()
+            if website:
+                props["website"] = website
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [float(lon), float(lat)],
+                },
+                "properties": props,
+            })
+    print(f"  {len(features)} places loaded.")
+    print()
+    return {"type": "FeatureCollection", "features": features}
+
+
+def lookup_boundaries_for_cities(city_names: list[str]) -> dict:
+    """Look up boundary geometries for city names found in a CSV.
+
+    For each city name, searches the boundary index. If multiple matches
+    are found (same name in different countries), the user picks the
+    correct one. Returns a FeatureCollection with boundary polygons.
+    """
+    ensure_boundaries_cache()
+    index = load_boundaries_index()
+
+    print("  Matching cities to boundaries ...")
+    print()
+
+    gisco_ids = []
+    for name in city_names:
+        norm_name = _strip_accents(name.lower())
+        matches = [
+            r for r in index
+            if _strip_accents(r["LAU_NAME"].lower()) == norm_name
+        ]
+
+        if not matches:
+            print(f"    {name}: no boundary found, skipping.")
+            continue
+
+        if len(matches) == 1:
+            row = matches[0]
+            gisco_ids.append(row["GISCO_ID"])
+            print(f"    {name} ({row['CNTR_CODE']})")
+            continue
+
+        # Multiple matches — let the user choose.
+        print(f"    Multiple matches for '{name}':")
+        labels = [
+            f"{r['LAU_NAME']} ({r['CNTR_CODE']})" for r in matches
+        ]
+        for i, label in enumerate(labels, 1):
+            print(f"      {i}. {label}")
+        raw = input("    Enter number (or ENTER to skip): ").strip()
+        if raw.isdigit():
+            idx = int(raw) - 1
+            if 0 <= idx < len(matches):
+                row = matches[idx]
+                gisco_ids.append(row["GISCO_ID"])
+                print(f"    Selected: {row['LAU_NAME']} ({row['CNTR_CODE']})")
+            else:
+                print(f"    Invalid choice, skipping {name}.")
+        else:
+            print(f"    Skipping {name}.")
+
+    print()
+
+    if not gisco_ids:
+        return {"type": "FeatureCollection", "features": []}
+
+    id_list_sql = ", ".join(f"'{gid}'" for gid in gisco_ids)
+
+    print(f"  Loading boundaries for {len(gisco_ids)} cities ...")
+    con = duckdb.connect()
+    con.install_extension("spatial")
+    con.load_extension("spatial")
+
+    rows = con.execute(f"""
+        SELECT LAU_NAME AS city, ST_AsGeoJSON(geom) AS geojson_geom
+        FROM ST_Read('{BOUNDARIES_CACHE.as_posix()}')
+        WHERE GISCO_ID IN ({id_list_sql});
+    """).fetchall()
+    con.close()
+
+    features = []
+    for city_name, geom_json in rows:
+        features.append({
+            "type": "Feature",
+            "geometry": json.loads(geom_json),
+            "properties": {"city": city_name},
+        })
+
+    print(f"  {len(features)} boundaries loaded.")
+    print()
+    return {"type": "FeatureCollection", "features": features}
+
+
+# ---------------------------------------------------------------------------
 # Generate HTML
 # ---------------------------------------------------------------------------
 
@@ -377,17 +520,16 @@ def query_overture(
 def generate_html(
     places_fc: dict,
     boundary_fc: dict,
-    selected_cities: list[dict],
+    title: str,
 ) -> Path:
     """Inject data into the template and write to output/."""
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
 
-    city_names = ", ".join(c["LAU_NAME"] for c in selected_cities)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     html = template.replace("__GEOJSON_DATA__", json.dumps(places_fc, ensure_ascii=False))
     html = html.replace("__BOUNDARY_DATA__", json.dumps(boundary_fc, ensure_ascii=False))
-    html = html.replace("__TITLE__", city_names)
+    html = html.replace("__TITLE__", title)
     html = html.replace("__TIMESTAMP__", timestamp)
 
     out_path = MAP_DIR / f"cultural_map_{timestamp}.html"
@@ -416,36 +558,50 @@ def main() -> None:
     print("  -----------")
     print()
 
-    # Ensure the boundary file and category list are cached locally.
-    ensure_boundaries_cache()
     groups = load_categories(DATA_DIR)
 
-    # Select cities.
-    index = load_boundaries_index()
-    selected_cities = select_cities(index)
+    # Check for a CSV file in input_data/.
+    csv_path = find_input_csv()
 
-    # Select categories.
-    category_slugs = select_category_groups(groups)
-    if not category_slugs:
-        print("  No categories selected.")
-        sys.exit(0)
+    if csv_path:
+        # CSV import mode — skip city/category selection.
+        print(f"  Found input file: {csv_path.name}")
+        print()
+        places_fc = load_csv_as_geojson(csv_path, groups)
+        cities = sorted({
+            f["properties"]["city"]
+            for f in places_fc["features"]
+            if f["properties"].get("city")
+        })
+        boundary_fc = lookup_boundaries_for_cities(cities)
+        title = ", ".join(cities) if cities else csv_path.stem
+    else:
+        # Interactive mode — search cities, pick categories, query Overture.
+        ensure_boundaries_cache()
 
-    print(f"\n  {len(category_slugs)} categories selected.\n")
+        index = load_boundaries_index()
+        selected_cities = select_cities(index)
 
-    # Select Overture release.
-    overture_release = select_overture_release()
+        category_slugs = select_category_groups(groups)
+        if not category_slugs:
+            print("  No categories selected.")
+            sys.exit(0)
 
-    # Fetch places.
-    places_fc, boundary_fc = query_overture(
-        selected_cities, category_slugs, groups, overture_release,
-    )
+        print(f"\n  {len(category_slugs)} categories selected.\n")
+
+        overture_release = select_overture_release()
+
+        places_fc, boundary_fc = query_overture(
+            selected_cities, category_slugs, groups, overture_release,
+        )
+        title = ", ".join(c["LAU_NAME"] for c in selected_cities)
 
     if not places_fc["features"]:
-        print("  No places found. Try broader categories or different cities.")
+        print("  No places found.")
         sys.exit(0)
 
     # Generate map.
-    out_path = generate_html(places_fc, boundary_fc, selected_cities)
+    out_path = generate_html(places_fc, boundary_fc, title)
     print(f"  Map saved: {out_path}")
     print(f"  {len(places_fc['features'])} places.")
     print()

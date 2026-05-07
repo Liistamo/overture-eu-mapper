@@ -2,3 +2,5 @@
 .DS_Store
 scripts/data/
 output_map/*.html
+input_data/
+.claude/
