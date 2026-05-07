@@ -2,5 +2,6 @@
 .DS_Store
 scripts/data/
 output_map/*.html
-input_data/
+input_data/*
+!input_data/.gitkeep
 .claude/
