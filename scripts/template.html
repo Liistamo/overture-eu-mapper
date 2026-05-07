@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cultural Map — __TITLE__</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    html, body { height:100%; margin:0; font-family: sans-serif; }
+    #map { height: 100vh; }
+
+    #controlsTopRight {
+      position: absolute; top: 4px; right: 4px; z-index: 1101;
+      display: flex; flex-direction: column; gap: 5px;
+    }
+    #togglePanelBtn, #citySelector, #toggleAllBtn, #exportCsvBtn {
+      padding: 4px 8px; background: #fff; border: 1px solid #aaa;
+      cursor: pointer; font-size: 13px; border-radius: 3px;
+    }
+
+    #panel {
+      position: absolute; top: 75px; right: 10px; width: 260px; max-height: calc(100% - 90px);
+      background: #fff; border: 1px solid #aaa; padding: 10px; font-size: 13px;
+      z-index: 1000; display: none; overflow-y: auto; border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+
+    #legend { margin-top: 10px; display: none; border-top: 1px solid #ccc; padding-top: 10px; }
+    #legendToggle { cursor: pointer; font-size: 11px; float: right; line-height: 1; margin-top: 8px; color: #555; }
+
+    #loadingBadge {
+      position: absolute; left: 6px; top: 6px; z-index: 1200;
+      background: #111; color: #fff; font: 12px/1.3 monospace;
+      padding: 4px 6px; border-radius: 6px; opacity: .9; display: none;
+    }
+    #bottomLeftStack {
+      position: absolute; left: 10px; bottom: 28px; z-index: 1200;
+      display: flex; flex-direction: column; gap: 0; align-items: flex-start;
+    }
+    #pointCount {
+      background: rgba(255,255,255,.9); font: 12px/1.3 monospace;
+      padding: 3px 6px; border-radius: 4px 4px 0 0; border: 1px solid #aaa;
+      border-bottom: none;
+    }
+    #startupBrand {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.9); padding: 4px 6px;
+      border-radius: 0 0 4px 4px; border: 1px solid #aaa;
+    }
+    #startupBrand img { height: 18px; width: auto; }
+    #startupBrand a {
+      color: #003366; text-decoration: none; font-size: 12px; line-height: 1;
+    }
+
+    .leaflet-top, .leaflet-bottom { z-index: 1201; }
+
+    .north-arrow.leaflet-bar {
+      background: rgba(255,255,255,.95); border: 1px solid #aaa; border-radius: 6px;
+      width: 32px; height: 32px; display: flex; align-items: flex-end;
+      justify-content: center; font: 700 13px/1 sans-serif;
+    }
+    .north-arrow.leaflet-bar::before {
+      content: '▲'; position: absolute; top: 2px; font-size: 12px; color: #c00;
+    }
+  </style>
+</head>
+<body>
+
+<div id="controlsTopRight">
+  <select id="citySelector"><option value="All">All cities</option></select>
+  <button id="togglePanelBtn">Filters</button>
+</div>
+
+<div id="panel">
+  <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
+    <button id="toggleAllBtn" title="Toggle all categories">Clear all</button>
+    <button id="exportCsvBtn" style="margin-left:auto;">CSV</button>
+  </div>
+  <div id="categoriesList"></div>
+  <div id="legendToggle" title="Show legend">legend ▾</div>
+  <div id="legend"></div>
+</div>
+
+<div id="loadingBadge">Loading…</div>
+<div id="bottomLeftStack">
+  <div id="pointCount"></div>
+  <div id="startupBrand">
+    <img src="data:image/png;base64,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" alt="STARTUP">
+    <a href="https://www.horizon-startup.eu" target="_blank">www.horizon-startup.eu</a>
+  </div>
+</div>
+<div id="map"></div>
+
+<script>
+/* === Embedded data (injected by build_map.py) === */
+var DATA = __GEOJSON_DATA__;
+var BOUNDARIES = __BOUNDARY_DATA__;
+
+/* === Helpers === */
+function esc(s){
+  return String(s||"").replace(/[&<>"']/g, function(m){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+  });
+}
+function norm(s){
+  return (s||"").normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+
+/* === Leaflet map === */
+var map = L.map('map', {
+  zoomSnap: 0.25, zoomDelta: 0.25,
+  wheelPxPerZoomLevel: 120, scrollWheelZoom: true
+}).setView([51, 10], 4);
+
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  crossOrigin: true
+}).addTo(map);
+
+L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
+
+var NorthCtrl = L.Control.extend({
+  options: { position: 'bottomright' },
+  onAdd: function(){
+    var div = L.DomUtil.create('div','leaflet-control leaflet-bar north-arrow');
+    div.title = 'North'; div.innerHTML = 'N';
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  }
+});
+map.addControl(new NorthCtrl());
+
+/* === Boundaries === */
+var boundaryLayers = {};
+var boundaryStyle = { color: '#007BFF', weight: 3, opacity: 1, fill: false };
+
+if (BOUNDARIES && BOUNDARIES.features) {
+  BOUNDARIES.features.forEach(function(feat){
+    var city = (feat.properties||{}).city || '';
+    var layer = L.geoJSON(feat, { style: boundaryStyle }).addTo(map);
+    boundaryLayers[city] = layer;
+  });
+}
+
+function zoomToCity(city){
+  if (city === 'All') return;
+  var layer = boundaryLayers[city];
+  if (!layer) {
+    var key = norm(city);
+    var match = Object.keys(boundaryLayers).find(function(k){ return norm(k)===key; });
+    if (match) layer = boundaryLayers[match];
+  }
+  if (layer) {
+    var b = layer.getBounds();
+    if (b && b.isValid()) map.fitBounds(b, { padding:[30,30] });
+  }
+}
+
+/* === Points rendering === */
+var geoLayer, allData = DATA;
+
+function renderFeatures(selectedCategories, selectedCity){
+  var filtered = allData.features.filter(function(f){
+    var p = f.properties || {};
+    return selectedCategories.indexOf(p.category) !== -1 &&
+           (selectedCity === 'All' || norm(p.city) === norm(selectedCity));
+  });
+
+  if (geoLayer) map.removeLayer(geoLayer);
+  geoLayer = L.geoJSON({ type:'FeatureCollection', features: filtered }, {
+    pointToLayer: function(feature, latlng){
+      var color = (feature.properties||{}).color || 'gray';
+      return L.circleMarker(latlng, {
+        radius:8, fillColor:color, color:'#000', weight:1.5, opacity:0.8, fillOpacity:0.7
+      });
+    },
+    onEachFeature: function(feature, layer){
+      var p = feature.properties || {};
+      var html = '<b>'+esc(p.name||'No name')+'</b><br>'+
+                 'City: '+esc(p.city||'-')+'<br>'+
+                 'Category: '+esc((p.category||'-').replace(/_/g,' '));
+      if (p.website) html += '<br>Web: <a href="'+esc(p.website)+'" target="_blank" rel="noopener">'+esc(p.website)+'</a>';
+      layer.bindPopup(html);
+    }
+  }).addTo(map);
+
+  document.getElementById('pointCount').textContent = filtered.length + ' places shown';
+
+  if (selectedCity !== 'All') {
+    zoomToCity(selectedCity);
+  } else if (filtered.length) {
+    var b = geoLayer.getBounds();
+    if (b && b.isValid()) map.fitBounds(b, { padding:[30,30] });
+  }
+}
+
+/* === UI setup === */
+function setupUI(){
+  var allCats = Array.from(new Set(
+    allData.features.map(function(f){ return (f.properties||{}).category; }).filter(Boolean)
+  )).sort();
+
+  var cities = Array.from(new Set(
+    allData.features.map(function(f){ return (f.properties||{}).city; }).filter(Boolean)
+  )).sort();
+
+  var catColors = {};
+  allData.features.forEach(function(f){
+    var p = f.properties||{};
+    if (p.category && p.color) catColors[p.category] = p.color;
+  });
+
+  var catList = document.getElementById('categoriesList');
+  var citySelector = document.getElementById('citySelector');
+  var toggleAllBtn = document.getElementById('toggleAllBtn');
+
+  catList.innerHTML = '';
+  citySelector.innerHTML = '<option value="All">All cities</option>';
+
+  cities.forEach(function(c){
+    var opt = document.createElement('option');
+    opt.value = c; opt.textContent = c; citySelector.appendChild(opt);
+  });
+
+  allCats.forEach(function(cat){
+    var label = document.createElement('label');
+    var display = cat.replace(/_/g,' ');
+    label.innerHTML = '<input type="checkbox" value="'+esc(cat)+'" checked> '+esc(display);
+    catList.appendChild(label);
+    catList.appendChild(document.createElement('br'));
+  });
+
+  var legend = document.getElementById('legend');
+  legend.innerHTML = '<strong>Legend:</strong><br>' +
+    allCats.map(function(c){
+      var col = catColors[c]||'gray';
+      return '<span style="color:'+esc(col)+'">●</span> '+esc(c.replace(/_/g,' '));
+    }).join('<br>');
+
+  function debounce(fn, wait){
+    var t; return function(){ clearTimeout(t); t=setTimeout(fn, wait); };
+  }
+
+  var updateMap = debounce(function(){
+    var selected = Array.from(document.querySelectorAll('#categoriesList input[type=checkbox]'))
+      .filter(function(c){ return c.checked; }).map(function(c){ return c.value; });
+    renderFeatures(selected, citySelector.value);
+  }, 120);
+
+  var allSelected = true;
+  toggleAllBtn.addEventListener('click', function(){
+    allSelected = !allSelected;
+    document.querySelectorAll('#categoriesList input[type=checkbox]').forEach(function(cb){ cb.checked = allSelected; });
+    toggleAllBtn.textContent = allSelected ? 'Clear all' : 'Select all';
+    updateMap();
+  });
+
+  catList.addEventListener('change', function(e){
+    if (e.target && e.target.matches('input[type=checkbox]')) updateMap();
+  });
+  citySelector.addEventListener('change', updateMap);
+
+  updateMap();
+}
+
+/* === Panel toggle === */
+document.getElementById('togglePanelBtn').addEventListener('click', function(){
+  var panel = document.getElementById('panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('legendToggle').addEventListener('click', function(){
+  var legend = document.getElementById('legend');
+  legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+});
+
+/* === CSV export === */
+document.getElementById('exportCsvBtn').addEventListener('click', function(){
+  var selectedCats = Array.from(document.querySelectorAll('#categoriesList input[type=checkbox]'))
+    .filter(function(c){ return c.checked; }).map(function(c){ return c.value; });
+  var selectedCity = document.getElementById('citySelector').value;
+
+  var filtered = allData.features.filter(function(f){
+    var p = f.properties||{};
+    return selectedCats.indexOf(p.category)!==-1 &&
+           (selectedCity==='All' || norm(p.city)===norm(selectedCity));
+  });
+
+  if (!filtered.length){ alert('No data to export.'); return; }
+
+  var header = ['name','category','website','city','lat','lon'];
+  var rows = [header];
+  filtered.forEach(function(f){
+    var p = f.properties||{};
+    var c = (f.geometry&&f.geometry.coordinates)||[null,null];
+    rows.push([p.name||'', p.category||'', p.website||'', p.city||'', c[1], c[0]]);
+  });
+
+  var csv = '\uFEFF' + rows.map(function(r){
+    return r.map(function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }).join(',');
+  }).join('\n');
+
+  var blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  var d = new Date(), ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  a.download = 'places_' + ds + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+/* === Init === */
+setupUI();
+</script>
+</body>
+</html>

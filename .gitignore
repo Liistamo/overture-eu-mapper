@@ -1,0 +1,4 @@
+.venv/
+.DS_Store
+scripts/data/
+output_map/*.html

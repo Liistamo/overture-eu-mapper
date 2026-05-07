@@ -1,0 +1,52 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it as below."
+title: "overture-eu-mapper: Build maps of places from Overture Maps within European municipal boundaries"
+abstract: >
+  Interactive tool to search European municipalities (Eurostat GISCO LAU),
+  pick Overture Maps categories, and generate standalone Leaflet maps.
+authors:
+  - family-names: Liistamo
+    given-names: Magnus
+    email: magnus.liistamo@humangeo.su.se
+    affiliation: "Stockholm University, Department of Human Geography"
+license: Apache-2.0
+repository-code: "https://github.com/Liistamo/overture-eu-mapper"
+type: software
+version: "0.1.0"
+keywords:
+  - GIS
+  - GeoJSON
+  - Leaflet
+  - Overture Maps
+  - Eurostat
+  - LAU
+  - DuckDB
+date-released: "2026-05-07"
+
+preferred-citation:
+  type: software
+  title: "overture-eu-mapper: Build maps of places from Overture Maps within European municipal boundaries"
+  authors:
+    - family-names: Liistamo
+      given-names: Magnus
+      affiliation: "Stockholm University, Department of Human Geography"
+  year: 2026
+  version: "0.1.0"
+  url: "https://github.com/Liistamo/overture-eu-mapper/releases/latest"
+  license: "Apache-2.0"
+  notes: >
+    Please cite as: Magnus Liistamo / STARTUP, 2026.
+    Funded by the European Union – Horizon Europe research and innovation
+    programme under Grant Agreement No 101178523.
+
+references:
+  - type: software
+    title: "startup-cultural-data: Art & Cultural Places — LAU/EPCI + Overture Maps → Leaflet Map"
+    authors:
+      - family-names: Liistamo
+        given-names: Magnus
+        affiliation: "Stockholm University, Department of Human Geography"
+    year: 2025
+    version: "0.1.0"
+    url: "https://github.com/Liistamo/cultural_data"
+    license: "Apache-2.0"

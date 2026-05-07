@@ -1,0 +1,10 @@
+overture-eu-mapper
+Copyright 2026 Magnus Liistamo
+
+This product includes software developed by third parties.
+See scripts/requirements.txt and individual package licenses for details.
+
+Map data:
+  - Eurostat GISCO LAU 2024 (© European Union)
+  - Overture Maps Foundation (CDLA-Permissive 2.0)
+  - OpenStreetMap (© OpenStreetMap contributors, ODbL)
