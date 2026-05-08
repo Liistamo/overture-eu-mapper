@@ -50,6 +50,14 @@ BOUNDARIES_URL = (
 BOUNDARIES_CACHE = DATA_DIR / "boundaries_cache.geojson"
 BOUNDARIES_INDEX = DATA_DIR / "boundaries_index.csv"
 
+# Eurostat GISCO country boundaries, EPSG:4326.
+COUNTRIES_URL = (
+    "https://gisco-services.ec.europa.eu/distribution/v2/countries/geojson/"
+    "CNTR_RG_01M_2024_4326.geojson"
+)
+COUNTRIES_CACHE = DATA_DIR / "countries_cache.geojson"
+COUNTRIES_INDEX = DATA_DIR / "countries_index.csv"
+
 OVERTURE_RELEASE_DEFAULT = "2026-04-15.0"
 OVERTURE_STAC_URL = "https://stac.overturemaps.org/catalog.json"
 
@@ -89,8 +97,26 @@ def select_overture_release() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Boundaries (Eurostat GISCO LAU)
+# Boundaries (Eurostat GISCO LAU + countries)
 # ---------------------------------------------------------------------------
+
+# European country names for search (ISO 3166-1 alpha-2 codes used by GISCO).
+COUNTRY_NAMES: dict[str, str] = {
+    "AT": "Austria", "BE": "Belgium", "BG": "Bulgaria",
+    "CH": "Switzerland", "CY": "Cyprus", "CZ": "Czechia",
+    "DE": "Germany", "DK": "Denmark", "EE": "Estonia",
+    "EL": "Greece", "ES": "Spain", "FI": "Finland",
+    "FR": "France", "HR": "Croatia", "HU": "Hungary",
+    "IE": "Ireland", "IS": "Iceland", "IT": "Italy",
+    "LI": "Liechtenstein", "LT": "Lithuania", "LU": "Luxembourg",
+    "LV": "Latvia", "ME": "Montenegro", "MK": "North Macedonia",
+    "MT": "Malta", "NL": "Netherlands", "NO": "Norway",
+    "PL": "Poland", "PT": "Portugal", "RO": "Romania",
+    "RS": "Serbia", "SE": "Sweden", "SI": "Slovenia",
+    "SK": "Slovakia", "TR": "Turkey", "UK": "United Kingdom",
+    "AL": "Albania", "BA": "Bosnia and Herzegovina",
+    "XK": "Kosovo",
+}
 
 
 def ensure_boundaries_cache() -> None:
@@ -101,6 +127,16 @@ def ensure_boundaries_cache() -> None:
     print(f"  Source: {BOUNDARIES_URL}")
     print()
     urllib.request.urlretrieve(BOUNDARIES_URL, BOUNDARIES_CACHE)
+    print("  Done.")
+    print()
+
+
+def ensure_countries_cache() -> None:
+    """Download the country boundaries file if not already cached locally."""
+    if COUNTRIES_CACHE.exists():
+        return
+    print("  Downloading country boundaries (first run only)")
+    urllib.request.urlretrieve(COUNTRIES_URL, COUNTRIES_CACHE)
     print("  Done.")
     print()
 
@@ -138,7 +174,7 @@ def load_boundaries_index() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# City search
+# Search (cities + countries)
 # ---------------------------------------------------------------------------
 
 
@@ -158,44 +194,73 @@ def _strip_accents(s: str) -> str:
     )
 
 
-def search_cities(index: list[dict], query: str, limit: int = 20) -> list[dict]:
-    """Search city names, accent- and case-insensitive."""
+def _search_countries(query: str) -> list[dict]:
+    """Search country names and codes, case-insensitive."""
     q = _strip_accents(query.strip().lower())
     if not q:
         return []
-    matches = [r for r in index if q in _strip_accents(r["LAU_NAME"].lower())]
-    matches.sort(key=lambda r: (
+    results = []
+    for code, name in COUNTRY_NAMES.items():
+        if q in _strip_accents(name.lower()) or q == code.lower():
+            results.append({
+                "GISCO_ID": f"CNTR_{code}",
+                "LAU_NAME": name,
+                "CNTR_CODE": code,
+                "_is_country": True,
+            })
+    results.sort(key=lambda r: r["LAU_NAME"])
+    return results
+
+
+def search_places(index: list[dict], query: str, limit: int = 20) -> list[dict]:
+    """Search cities and countries, accent- and case-insensitive."""
+    q = _strip_accents(query.strip().lower())
+    if not q:
+        return []
+
+    # Countries first.
+    countries = _search_countries(query)
+
+    # Then cities.
+    cities = [r for r in index if q in _strip_accents(r["LAU_NAME"].lower())]
+    cities.sort(key=lambda r: (
         not _strip_accents(r["LAU_NAME"].lower()).startswith(q),
         r["LAU_NAME"],
     ))
-    return matches[:limit]
+
+    return countries + cities[:limit]
 
 
-def select_cities(index: list[dict]) -> list[dict]:
-    """Search and select cities in a loop. Return selected rows."""
+def select_places(index: list[dict]) -> list[dict]:
+    """Search and select cities or countries in a loop."""
     TerminalMenu = _try_import_terminal_menu()
     selected: list[dict] = []
 
     print()
-    print("  Select cities")
+    print("  Select cities or countries")
     print("  Search by name. Repeat to add more.")
     print("  Press ENTER with no text when done.")
     print()
 
     while True:
-        query = input("  Search city (ENTER = done): ").strip()
+        query = input("  Search (ENTER = done): ").strip()
         if not query:
             if not selected:
-                print("  Select at least one city.")
+                print("  Select at least one city or country.")
                 continue
             break
 
-        matches = search_cities(index, query)
+        matches = search_places(index, query)
         if not matches:
             print(f"  No matches for '{query}'.\n")
             continue
 
-        labels = [f"{r['LAU_NAME']} ({r['CNTR_CODE']})" for r in matches]
+        labels = []
+        for r in matches:
+            if r.get("_is_country"):
+                labels.append(f"{r['LAU_NAME']} (country)")
+            else:
+                labels.append(f"{r['LAU_NAME']} ({r['CNTR_CODE']})")
 
         if TerminalMenu:
             menu = TerminalMenu(
@@ -229,15 +294,21 @@ def select_cities(index: list[dict]) -> list[dict]:
             row = matches[i]
             if row["GISCO_ID"] not in {s["GISCO_ID"] for s in selected}:
                 selected.append(row)
-                print(f"  + {row['LAU_NAME']} ({row['CNTR_CODE']})")
+                if row.get("_is_country"):
+                    print(f"  + {row['LAU_NAME']} (country)")
+                else:
+                    print(f"  + {row['LAU_NAME']} ({row['CNTR_CODE']})")
 
-        print(f"\n  Selected so far: {len(selected)} cities")
+        print(f"\n  Selected so far: {len(selected)}")
         print()
 
     print()
-    print("  Selected cities:")
+    print("  Selected:")
     for s in selected:
-        print(f"    {s['LAU_NAME']} ({s['CNTR_CODE']})")
+        if s.get("_is_country"):
+            print(f"    {s['LAU_NAME']} (country)")
+        else:
+            print(f"    {s['LAU_NAME']} ({s['CNTR_CODE']})")
     print()
     return selected
 
@@ -248,21 +319,21 @@ def select_cities(index: list[dict]) -> list[dict]:
 
 
 def query_overture(
-    selected_cities: list[dict],
+    selected_places: list[dict],
     category_slugs: list[str],
     groups: dict[str, list[str]],
     overture_release: str = OVERTURE_RELEASE_DEFAULT,
 ) -> tuple[dict, dict]:
-    """Fetch Overture Places within selected city boundaries via DuckDB.
+    """Fetch Overture Places within selected boundaries via DuckDB.
 
     Return (places_geojson, boundaries_geojson).
     """
-    gisco_ids = [c["GISCO_ID"] for c in selected_cities]
-    id_list_sql = ", ".join(f"'{gid}'" for gid in gisco_ids)
+    cities = [p for p in selected_places if not p.get("_is_country")]
+    countries = [p for p in selected_places if p.get("_is_country")]
     cat_list_sql = ", ".join(f"'{c}'" for c in category_slugs)
 
     print("  Building map (this may take a few minutes) ...")
-    print(f"    Cities:     {len(selected_cities)}")
+    print(f"    Places:     {len(selected_places)}")
     print(f"    Categories: {len(category_slugs)}")
     print()
     t0 = time.time()
@@ -276,12 +347,26 @@ def query_overture(
     con.execute("SET s3_region='us-west-2';")
     con.execute("SET threads TO 4;")
 
-    # Load selected city boundaries from cached file.
+    # Load boundaries: cities from LAU file, countries from country file.
+    boundary_parts = []
+    if cities:
+        city_ids = ", ".join(f"'{c['GISCO_ID']}'" for c in cities)
+        boundary_parts.append(f"""
+            SELECT LAU_NAME AS city, geom
+            FROM ST_Read('{BOUNDARIES_CACHE.as_posix()}')
+            WHERE GISCO_ID IN ({city_ids})
+        """)
+    if countries:
+        ensure_countries_cache()
+        cntr_codes = ", ".join(f"'{c['CNTR_CODE']}'" for c in countries)
+        boundary_parts.append(f"""
+            SELECT NAME_ENGL AS city, geom
+            FROM ST_Read('{COUNTRIES_CACHE.as_posix()}')
+            WHERE CNTR_ID IN ({cntr_codes})
+        """)
     con.execute(f"""
         CREATE TABLE boundaries AS
-        SELECT LAU_NAME AS city, geom
-        FROM ST_Read('{BOUNDARIES_CACHE.as_posix()}')
-        WHERE GISCO_ID IN ({id_list_sql});
+        {" UNION ALL ".join(boundary_parts)};
     """)
 
     # Compute per-city bounding boxes with margin. Using individual boxes
@@ -578,11 +663,11 @@ def main() -> None:
         boundary_fc = lookup_boundaries_for_cities(cities)
         title = ", ".join(cities) if cities else csv_path.stem
     else:
-        # Interactive mode — search cities, pick categories, query Overture.
+        # Interactive mode — search cities/countries, pick categories, query Overture.
         ensure_boundaries_cache()
 
         index = load_boundaries_index()
-        selected_cities = select_cities(index)
+        selected_places = select_places(index)
 
         category_slugs = select_category_groups(groups)
         if not category_slugs:
@@ -594,9 +679,9 @@ def main() -> None:
         overture_release = select_overture_release()
 
         places_fc, boundary_fc = query_overture(
-            selected_cities, category_slugs, groups, overture_release,
+            selected_places, category_slugs, groups, overture_release,
         )
-        title = ", ".join(c["LAU_NAME"] for c in selected_cities)
+        title = ", ".join(c["LAU_NAME"] for c in selected_places)
 
     if not places_fc["features"]:
         print("  No places found.")
