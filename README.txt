@@ -2,7 +2,7 @@ MAP BUILDER
 ===========
 
 Build an interactive map of places — cafés, museums, schools, parks,
-anything — in any European city or municipality. The result is a
+anything — in any European city or country. The result is a
 single HTML file you open in your browser.
 
 Double-click the build script for your system to get started.
@@ -39,7 +39,7 @@ the first time only, later runs are fast.
 
 You'll be asked three questions:
 
-  1. Which municipality or country? Search by name.
+  1. Which city or country? Search by name.
   2. What types of places? Cafés, schools, parks, and so on.
   3. Which version of the map data? Press Enter for the default.
 
@@ -100,7 +100,7 @@ Nothing happens, or the window closes immediately:
   the script from there. Error messages will show up.
 
 The map is empty or sparse:
-  The category may have no data in that municipality. Try a larger
+  The category may have no data in that city. Try a larger
   city or a broader category.
 
 
