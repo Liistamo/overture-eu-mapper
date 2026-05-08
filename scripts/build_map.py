@@ -34,8 +34,8 @@ from categories import (
 SCRIPTS_DIR = Path(__file__).parent
 BASE_DIR = SCRIPTS_DIR.parent
 DATA_DIR = SCRIPTS_DIR / "data"
-INPUT_DIR = BASE_DIR / "input_data"
-MAP_DIR = BASE_DIR / "output_map"
+INPUT_DIR = BASE_DIR / "input"
+MAP_DIR = BASE_DIR / "output"
 TEMPLATE_PATH = SCRIPTS_DIR / "template.html"
 
 DATA_DIR.mkdir(exist_ok=True)
@@ -387,7 +387,7 @@ def query_overture(
 
 
 def find_input_csv() -> Path | None:
-    """Return the most recently modified CSV file in input_data/, or None."""
+    """Return the most recently modified CSV file in input/, or None."""
     if not INPUT_DIR.is_dir():
         return None
     csvs = list(INPUT_DIR.glob("*.csv"))
@@ -560,7 +560,7 @@ def main() -> None:
 
     groups = load_categories(DATA_DIR)
 
-    # Check for a CSV file in input_data/.
+    # Check for a CSV file in input/.
     csv_path = find_input_csv()
 
     if csv_path:

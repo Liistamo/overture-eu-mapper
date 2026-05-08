@@ -12,9 +12,9 @@ echo   Removing cached categories ...
 del /q scripts\data\overture_categories.csv 2>nul
 
 echo   Removing generated maps ...
-del /q output_map\*.html 2>nul
+del /q output\*.html 2>nul
 
 echo.
-echo   Clean. Run map_build_windows.bat to start over.
+echo   Clean. Run build-WINDOWS.bat to start over.
 echo.
 pause

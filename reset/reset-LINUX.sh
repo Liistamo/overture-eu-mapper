@@ -12,7 +12,7 @@ echo "  Removing cached categories ..."
 rm -f scripts/data/overture_categories.csv
 
 echo "  Removing generated maps ..."
-rm -f output_map/*.html
+rm -f output/*.html
 
 echo ""
-echo "  Clean. Run map_build_linux.sh to start over."
+echo "  Clean. Run build-LINUX.sh to start over."

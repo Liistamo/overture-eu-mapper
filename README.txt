@@ -44,7 +44,7 @@ You'll be asked three questions:
   3. Which version of the map data? Press Enter for the default.
 
 When the tool finishes, the map opens in your browser. The file
-is also saved in output_map/.
+is also saved in output/.
 
 
 IMPORT FROM CSV
@@ -52,7 +52,7 @@ IMPORT FROM CSV
 You can also build a map from a previously exported CSV file.
 
   1. Use the CSV export button in an existing map to save a file.
-  2. Place the CSV file in the input_data/ folder.
+  2. Place the CSV file in the input/ folder.
   3. Run the tool as usual (double-click the build script).
 
 The tool detects the CSV automatically and skips the city and
@@ -64,7 +64,7 @@ exists in more than one country, you will be asked to pick
 the correct one.
 
 To go back to the normal interactive mode, remove or move the
-CSV file out of input_data/.
+CSV file out of input/.
 
 
 IF SOMETHING GOES WRONG
@@ -97,7 +97,8 @@ Open the reset/ folder and double-click the right file:
   Windows:  reset-WINDOWS.bat
   Linux:    ./reset-LINUX.sh
 
-This deletes downloaded data and previous maps. Python is left alone.
+This deletes downloaded data and previous maps. CSV files in
+input/ and Python are left alone.
 
 
 WHERE THE DATA COMES FROM

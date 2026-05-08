@@ -7,7 +7,7 @@
 #   2. Creates a Python environment and installs dependencies (first run only).
 #   3. Opens an interactive prompt where you pick cities and categories.
 #   4. Fetches places from Overture Maps.
-#   5. Saves a standalone HTML map in output_map/ and opens it in your browser.
+#   5. Saves a standalone HTML map in output/ and opens it in your browser.
 
 cd "$(dirname "$0")"
 

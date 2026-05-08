@@ -1,7 +1,7 @@
 .venv/
 .DS_Store
 scripts/data/
-output_map/*.html
-input_data/*
-!input_data/.gitkeep
+output/*.html
+input/*
+!input/.gitkeep
 .claude/
