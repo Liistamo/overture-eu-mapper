@@ -5,8 +5,7 @@ Build an interactive map of places — cafés, museums, schools, parks,
 anything — in any European city or municipality. The result is a
 single HTML file you open in your browser.
 
-The files in this folder are numbered in the order you use them:
-1 read, 2 run, 3 reset.
+Double-click the build script for your system to get started.
 
 
 INSTALL PYTHON
@@ -27,13 +26,13 @@ it won't break anything.
 
 RUN THE TOOL
 ------------
-  Mac:      Double-click 2_map_build_mac.command.
+  Mac:      Double-click build-MAC.command.
             If macOS blocks it, right-click the file and choose Open.
 
-  Windows:  Double-click 2_map_build_windows.bat.
+  Windows:  Double-click build-WINDOWS.bat.
 
   Linux:    Open a terminal in this folder and run
-            ./2_map_build_linux.sh
+            ./build-LINUX.sh
 
 The first run takes a few minutes. The tool downloads map data
 the first time only, later runs are fast.
@@ -94,9 +93,9 @@ START OVER
 ----------
 Open the reset/ folder and double-click the right file:
 
-  Mac:      3_map_clean_mac.command
-  Windows:  3_map_clean_windows.bat
-  Linux:    ./3_map_clean_linux.sh
+  Mac:      reset-MAC.command
+  Windows:  reset-WINDOWS.bat
+  Linux:    ./reset-LINUX.sh
 
 This deletes downloaded data and previous maps. Python is left alone.
 
