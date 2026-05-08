@@ -156,10 +156,48 @@ def get_group_for_category(cat: str, groups: dict[str, list[str]]) -> str:
     return _category_to_group_cache.get(cat, "")
 
 
+def _hash_color(slug: str) -> str:
+    """Generate a consistent hex color from a category slug.
+
+    Uses a hash to pick hue, then fixes saturation and lightness
+    to produce vivid, readable marker colors.
+    """
+    import hashlib
+    h = int(hashlib.sha256(slug.encode()).hexdigest()[:8], 16)
+    hue = h % 360
+    sat = 55 + (h >> 12) % 25       # 55-79%
+    light = 40 + (h >> 20) % 15     # 40-54%
+    return _hsl_to_hex(hue, sat, light)
+
+
+def _hsl_to_hex(h: int, s: int, l: int) -> str:
+    """Convert HSL (0-360, 0-100, 0-100) to hex color."""
+    s_f = s / 100
+    l_f = l / 100
+    c = (1 - abs(2 * l_f - 1)) * s_f
+    x = c * (1 - abs((h / 60) % 2 - 1))
+    m = l_f - c / 2
+    if h < 60:
+        r, g, b = c, x, 0
+    elif h < 120:
+        r, g, b = x, c, 0
+    elif h < 180:
+        r, g, b = 0, c, x
+    elif h < 240:
+        r, g, b = 0, x, c
+    elif h < 300:
+        r, g, b = x, 0, c
+    else:
+        r, g, b = c, 0, x
+    ri = int((r + m) * 255)
+    gi = int((g + m) * 255)
+    bi = int((b + m) * 255)
+    return f"#{ri:02x}{gi:02x}{bi:02x}"
+
+
 def get_category_color(cat: str, groups: dict[str, list[str]]) -> str:
-    """Return hex color based on the category's top-level group."""
-    group = get_group_for_category(cat, groups)
-    return GROUP_COLORS.get(group, "#999999")
+    """Return a consistent hex color for a specific category."""
+    return _hash_color(cat) if cat else "#999999"
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +274,7 @@ def select_category_groups(groups: dict[str, list[str]]) -> list[str]:
     selected_keys = [sorted_keys[i] for i in selected_indices]
     print(f"\n  Selected: {', '.join(GROUP_DISPLAY_NAMES.get(k, k) for k in selected_keys)}")
 
-    answer = input("\n  Drill down into individual categories? (y/N): ").strip().lower()
+    answer = input("\n  Select individual categories? (y/N): ").strip().lower()
     if answer in ("y", "yes"):
         return _drill_down(groups, selected_keys, TerminalMenu)
 

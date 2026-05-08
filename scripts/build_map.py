@@ -15,6 +15,7 @@ import os
 import platform
 import subprocess
 import sys
+import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -59,7 +60,7 @@ def detect_latest_overture_release() -> str | None:
     try:
         req = urllib.request.Request(
             OVERTURE_STAC_URL,
-            headers={"User-Agent": "cultural-map-builder"},
+            headers={"User-Agent": "overture-eu-mapper"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
@@ -82,8 +83,8 @@ def select_overture_release() -> str:
     latest = detect_latest_overture_release()
     default = latest or OVERTURE_RELEASE_DEFAULT
 
-    print(f"\n  Overture Maps release: {default}")
-    choice = input(f"  Press ENTER to use this, or type a different version: ").strip()
+    print(f"\n  Default Overture Maps version: {default}")
+    choice = input(f"  Press ENTER to use default, or type a different version: ").strip()
     return choice if choice else default
 
 
@@ -260,11 +261,11 @@ def query_overture(
     id_list_sql = ", ".join(f"'{gid}'" for gid in gisco_ids)
     cat_list_sql = ", ".join(f"'{c}'" for c in category_slugs)
 
-    print("  Fetching places from Overture Maps")
+    print("  Building map (this may take a few minutes) ...")
     print(f"    Cities:     {len(selected_cities)}")
     print(f"    Categories: {len(category_slugs)}")
-    print(f"    Release:    {overture_release}")
     print()
+    t0 = time.time()
 
     con = duckdb.connect()
     con.install_extension("httpfs")
@@ -302,7 +303,7 @@ def query_overture(
 
     parts = []
     for city, xmin, ymin, xmax, ymax in city_bboxes:
-        print(f"    {city}: bbox [{xmin:.2f}, {ymin:.2f}] to [{xmax:.2f}, {ymax:.2f}]")
+        print(f"    {city} ...")
         parts.append(f"""
             SELECT geometry, names, categories, websites
             FROM read_parquet('{parquet_url}')
@@ -337,7 +338,8 @@ def query_overture(
     rows = con.execute("SELECT * FROM result").fetchall()
     columns = ["geojson_geom", "name", "category", "website", "city"]
 
-    print(f"    {len(rows)} places found.")
+    elapsed = time.time() - t0
+    print(f"    {len(rows)} places found in {elapsed:.0f}s.")
     print()
 
     # Build GeoJSON: places.
@@ -525,14 +527,14 @@ def generate_html(
     """Inject data into the template and write to output/."""
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
     html = template.replace("__GEOJSON_DATA__", json.dumps(places_fc, ensure_ascii=False))
     html = html.replace("__BOUNDARY_DATA__", json.dumps(boundary_fc, ensure_ascii=False))
     html = html.replace("__TITLE__", title)
     html = html.replace("__TIMESTAMP__", timestamp)
 
-    out_path = MAP_DIR / f"cultural_map_{timestamp}.html"
+    out_path = MAP_DIR / f"map-{timestamp}.html"
     out_path.write_text(html, encoding="utf-8")
     return out_path
 
