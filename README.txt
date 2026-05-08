@@ -67,6 +67,21 @@ To go back to the normal interactive mode, remove or move the
 CSV file out of input/.
 
 
+DEFAULT CATEGORIES
+------------------
+The file input/categories.txt controls which categories are used.
+If the file contains category names (one per line), those are used
+automatically and the category selection step is skipped.
+
+If the file is empty or only has comments, the tool asks you to
+choose categories interactively as usual.
+
+Lines starting with # are ignored and can be used for notes.
+
+The full list of available categories is at:
+https://github.com/OvertureMaps/schema/blob/main/docs/schema/concepts/by-theme/places/overture_categories.csv
+
+
 IF SOMETHING GOES WRONG
 -----------------------
 macOS won't open the file:

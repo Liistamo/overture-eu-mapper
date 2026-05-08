@@ -23,6 +23,7 @@ from pathlib import Path
 import duckdb
 
 from categories import (
+    build_color_map,
     get_category_color,
     load_categories,
     select_category_groups,
@@ -38,6 +39,7 @@ DATA_DIR = SCRIPTS_DIR / "data"
 INPUT_DIR = BASE_DIR / "input"
 MAP_DIR = BASE_DIR / "output"
 TEMPLATE_PATH = SCRIPTS_DIR / "template.html"
+CATEGORIES_FILE = INPUT_DIR / "categories.txt"
 
 DATA_DIR.mkdir(exist_ok=True)
 MAP_DIR.mkdir(exist_ok=True)
@@ -428,6 +430,9 @@ def query_overture(
     print()
 
     # Build GeoJSON: places.
+    all_cats = sorted({dict(zip(columns, r))["category"] for r in rows if dict(zip(columns, r))["category"]})
+    build_color_map(all_cats)
+
     features = []
     for row in rows:
         rec = dict(zip(columns, row))
@@ -469,6 +474,27 @@ def query_overture(
 
 
 # ---------------------------------------------------------------------------
+# Load categories from file
+# ---------------------------------------------------------------------------
+
+
+def load_categories_file() -> list[str] | None:
+    """Read category slugs from input/categories.txt.
+
+    Return a list of slugs, or None if the file is missing or empty.
+    """
+    if not CATEGORIES_FILE.exists():
+        return None
+    slugs = []
+    with open(CATEGORIES_FILE, encoding="utf-8-sig") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                slugs.append(line)
+    return slugs if slugs else None
+
+
+# ---------------------------------------------------------------------------
 # Import from CSV
 # ---------------------------------------------------------------------------
 
@@ -486,7 +512,9 @@ def find_input_csv() -> Path | None:
 def load_csv_as_geojson(csv_path: Path, groups: dict[str, list[str]]) -> dict:
     """Read an exported CSV and return a places FeatureCollection."""
     print(f"  Loading: {csv_path.name}")
-    features = []
+
+    # First pass: read all rows and collect categories.
+    raw_rows = []
     with open(csv_path, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -494,23 +522,33 @@ def load_csv_as_geojson(csv_path: Path, groups: dict[str, list[str]]) -> dict:
             lon = row.get("lon", "").strip()
             if not lat or not lon:
                 continue
-            category = row.get("category", "unknown").strip() or "unknown"
-            props = {
-                "name": row.get("name", "Unnamed").strip() or "Unnamed",
-                "category": category,
-                "city": row.get("city", "").strip(),
-                "color": get_category_color(category, groups),
-            }
-            website = row.get("website", "").strip()
-            if website:
-                props["website"] = website
-            features.append({
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [float(lon), float(lat)],
-                },
-                "properties": props,
+            raw_rows.append(row)
+
+    all_cats = sorted({
+        (r.get("category", "").strip() or "unknown") for r in raw_rows
+    })
+    build_color_map(all_cats)
+
+    # Second pass: build features with colors.
+    features = []
+    for row in raw_rows:
+        category = row.get("category", "unknown").strip() or "unknown"
+        props = {
+            "name": row.get("name", "Unnamed").strip() or "Unnamed",
+            "category": category,
+            "city": row.get("city", "").strip(),
+            "color": get_category_color(category, groups),
+        }
+        website = row.get("website", "").strip()
+        if website:
+            props["website"] = website
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [float(row["lon"].strip()), float(row["lat"].strip())],
+            },
+            "properties": props,
             })
     print(f"  {len(features)} places loaded.")
     print()
@@ -669,10 +707,14 @@ def main() -> None:
         index = load_boundaries_index()
         selected_places = select_places(index)
 
-        category_slugs = select_category_groups(groups)
-        if not category_slugs:
-            print("  No categories selected.")
-            sys.exit(0)
+        category_slugs = load_categories_file()
+        if category_slugs:
+            print(f"  Loaded {len(category_slugs)} categories from {CATEGORIES_FILE.name}")
+        else:
+            category_slugs = select_category_groups(groups)
+            if not category_slugs:
+                print("  No categories selected.")
+                sys.exit(0)
 
         print(f"\n  {len(category_slugs)} categories selected.\n")
 

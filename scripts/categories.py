@@ -156,22 +156,8 @@ def get_group_for_category(cat: str, groups: dict[str, list[str]]) -> str:
     return _category_to_group_cache.get(cat, "")
 
 
-def _hash_color(slug: str) -> str:
-    """Generate a consistent hex color from a category slug.
-
-    Uses a hash to pick hue, then fixes saturation and lightness
-    to produce vivid, readable marker colors.
-    """
-    import hashlib
-    h = int(hashlib.sha256(slug.encode()).hexdigest()[:8], 16)
-    hue = h % 360
-    sat = 55 + (h >> 12) % 25       # 55-79%
-    light = 40 + (h >> 20) % 15     # 40-54%
-    return _hsl_to_hex(hue, sat, light)
-
-
-def _hsl_to_hex(h: int, s: int, l: int) -> str:
-    """Convert HSL (0-360, 0-100, 0-100) to hex color."""
+def _hsl_to_hex(h: float, s: float, l: float) -> str:
+    """Convert HSL (h: 0-360, s/l: 0-100) to hex color."""
     s_f = s / 100
     l_f = l / 100
     c = (1 - abs(2 * l_f - 1)) * s_f
@@ -195,9 +181,24 @@ def _hsl_to_hex(h: int, s: int, l: int) -> str:
     return f"#{ri:02x}{gi:02x}{bi:02x}"
 
 
+_color_map: dict[str, str] = {}
+
+
+def build_color_map(categories: list[str]) -> None:
+    """Assign maximally spread colors to a list of categories.
+
+    Call once after data is loaded, before generating the map.
+    """
+    _color_map.clear()
+    n = len(categories)
+    for i, cat in enumerate(sorted(categories)):
+        hue = (i * 360 / n) % 360
+        _color_map[cat] = _hsl_to_hex(hue, 70, 45)
+
+
 def get_category_color(cat: str, groups: dict[str, list[str]]) -> str:
-    """Return a consistent hex color for a specific category."""
-    return _hash_color(cat) if cat else "#999999"
+    """Return color for a category. Requires build_color_map() first."""
+    return _color_map.get(cat, "#999999")
 
 
 # ---------------------------------------------------------------------------

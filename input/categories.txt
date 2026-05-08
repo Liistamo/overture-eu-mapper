@@ -1,0 +1,6 @@
+# Categories for the map.
+# One category per line. Lines starting with # are ignored.
+# Remove or empty this file to choose categories interactively.
+#
+# Full list of available categories:
+# https://github.com/OvertureMaps/schema/blob/main/docs/schema/concepts/by-theme/places/overture_categories.csv
