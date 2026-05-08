@@ -39,7 +39,7 @@ the first time only, later runs are fast.
 
 You'll be asked three questions:
 
-  1. Which city or municipality? Search by name.
+  1. Which municipality or country? Search by name.
   2. What types of places? Cafés, schools, parks, and so on.
   3. Which version of the map data? Press Enter for the default.
 

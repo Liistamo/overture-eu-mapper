@@ -239,7 +239,7 @@ def select_places(index: list[dict]) -> list[dict]:
     selected: list[dict] = []
 
     print()
-    print("  Select cities or countries")
+    print("  Select municipalities or countries")
     print("  Search by name. Repeat to add more.")
     print("  Press ENTER with no text when done.")
     print()
