@@ -115,9 +115,10 @@ var map = L.map('map', {
   wheelPxPerZoomLevel: 120, scrollWheelZoom: true
 }).setView([51, 10], 4);
 
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors',
-  crossOrigin: true
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap contributors &amp; CARTO',
+  subdomains: 'abcd',
+  maxZoom: 20
 }).addTo(map);
 
 L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
