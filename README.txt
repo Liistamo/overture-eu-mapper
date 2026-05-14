@@ -85,8 +85,16 @@ https://github.com/OvertureMaps/schema/blob/main/docs/schema/concepts/by-theme/p
 IF SOMETHING GOES WRONG
 -----------------------
 macOS won't open the file:
-  Right-click the file, choose Open, confirm in the dialog.
-  Once is enough.
+  This is normal and only happens the first time. To fix it:
+    1. Open the Terminal app. You can find it by pressing
+       Command + Space and typing "Terminal".
+    2. Find the file called install-mac.sh in this folder.
+       Pick it up with the mouse and drop it into the
+       Terminal window. A file path will appear.
+    3. Press Enter.
+    4. You should see "Done". You can close Terminal.
+  After this, double-click build-MAC.command as usual.
+  You only need to do this once.
 
 Windows shows a blue SmartScreen warning:
   Click "More info", then "Run anyway".
